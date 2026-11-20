@@ -8,8 +8,14 @@ A shortcut from the library to the lab takes five minutes and includes stairs. A
 | Avoid stairs | Library → Garden → Lab | 8 min |
 | Avoid stairs and close Garden | Library → Commons → Studio → Lab | 9 min |
 
-## Try it on Windows
-Install a Java Development Kit (JDK) version 17 or newer. Extract the ZIP, open the RouteDesk folder in VS Code, then open Terminal → New Terminal. From the folder containing paths.csv, run:
+## Open the interactive map
+
+Double-click `index.html` to open the walking planner in your browser. Choose a starting location and a destination, select **Avoid stairs** or mark closed locations, and click **Find route**. The highlighted path and walking time update together.
+
+The browser version runs JavaScript locally and includes its own copy of the map data. The Java version reads `paths.csv`. If you change the campus network, update both versions.
+
+## Run the Java version on Windows
+Install a Java Development Kit (JDK) version 17 or newer. Open the project folder in VS Code, then open Terminal → New Terminal. From the folder containing paths.csv, run:
 
 ```powershell
 java RouteDesk.java Library Lab

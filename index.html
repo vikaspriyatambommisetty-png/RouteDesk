@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RouteDesk | Campus map</title>
+<style>
+:root{color-scheme:dark;--bg:#101922;--panel:#172531;--ink:#f2f4f2;--muted:#becbd0;--lime:#d6fa69}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Inter,"Segoe UI",sans-serif}
+main{max-width:1240px;margin:auto;padding:clamp(18px,4vw,54px)}
+header{display:flex;gap:18px;align-items:baseline;border-bottom:1px solid #45545d;padding-bottom:18px;margin-bottom:24px}
+h1,h2,p{margin:0}h1{font-size:32px;letter-spacing:-.055em}header p,figcaption,#note{color:var(--muted)}
+.layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(245px,1fr);gap:18px}
+figure,aside{margin:0;border:1px solid #3d505d;border-radius:16px;overflow:hidden;background:var(--panel)}
+figure{display:flex;flex-direction:column}
+figure h2,figcaption{padding:16px 22px}h2{font-size:21px}
+svg{width:100%;height:auto;display:block;background-color:#192c37;background-image:radial-gradient(#46606a 1px,transparent 1px);background-size:18px 18px;margin:auto 0}
+figcaption{font-size:14px}
+aside{padding:22px}
+select,button{width:100%;font:inherit;border-radius:7px;padding:9px 10px}
+select{display:block;background:#101c25;color:var(--ink);border:1px solid #586b74;margin:4px 0 12px}
+button{margin:14px 0 0;border:0;font-weight:700;background:var(--lime);color:#172510;cursor:pointer}
+input{accent-color:var(--lime)}summary{cursor:pointer}details{margin-top:9px}label{display:block}
+form h2{margin-bottom:13px}section{margin-top:21px;padding-top:15px;border-top:1px solid #495c66}
+output{display:block;color:var(--lime);font-size:30px;font-weight:700}
+ol{padding-left:24px;margin:9px 0}#note{font-size:14px}
+@media(max-width:740px){.layout{grid-template-columns:1fr}header{flex-wrap:wrap;gap:8px}main{padding:14px}}
+</style>
+</head>
+<body><main><header><h1>RouteDesk</h1><p>Campus walking planner</p></header>
+<div class="layout">
+<figure><h2>Campus map</h2><svg viewBox="0 0 620 370" role="img" aria-label="Schematic of seven campus locations and their connecting paths" id="map"></svg>
+<figcaption>Highlighted line · Selected walk &nbsp; / &nbsp; Dashed line · Stairs</figcaption></figure>
+<aside><form id="planner"><h2>Plan a walk</h2>
+<label>From<select id="from"></select></label><label>To<select id="to"></select></label>
+<label><input type="checkbox" id="stepFree"> Avoid stairs</label>
+<details><summary>Closed locations</summary><div id="closures"></div></details>
+<button>Find route</button></form>
+<section aria-live="polite"><h2>Your walk</h2><output id="duration"></output><ol id="stops"></ol><p id="note"></p></section></aside>
+</div></main><script>
+
+const paths = [["Library", "Commons", 3, false], ["Commons", "Lab", 2, true], ["Commons", "Studio", 2, false], ["Studio", "Lab", 4, false], ["Library", "Garden", 5, false], ["Garden", "Lab", 3, false], ["Studio", "Theater", 2, true], ["Garden", "Theater", 6, false], ["Lab", "Shuttle", 4, false]];
+const graph = new Map();
+function addPath(from, to, minutes, stairs) {
+  if (!graph.has(from)) graph.set(from, []);
+  graph.get(from).push({to, minutes, stairs});
+}
+for (const [from, to, minutes, stairs] of paths) {
+  addPath(from, to, minutes, stairs);
+  addPath(to, from, minutes, stairs);
+}
+const places = [...graph.keys()].sort();
+const byId = id => document.getElementById(id);
+for (const place of places) {
+  for (const id of ['from','to']) byId(id).add(new Option(place, place));
+  const label = document.createElement('label');
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.value = place;
+  label.append(box, ' ' + place);
+  byId('closures').append(label);
+}
+byId('from').value = 'Library';
+byId('to').value = 'Lab';
+function plan(start, end, avoidStairs, closed) {
+  const remaining = new Set(places.filter(place => !closed.has(place)));
+  const distance = new Map([[start, 0]]);
+  const previous = new Map();
+  while (remaining.size) {
+    let current;
+    let shortest = Infinity;
+    for (const place of remaining) {
+      if (distance.get(place) < shortest) {
+        current = place;
+        shortest = distance.get(place);
+      }
+    }
+    if (current === undefined) return null;
+    if (current === end) {
+      const stops = [];
+      for (let stop = end; stop !== undefined; stop = previous.get(stop)) stops.unshift(stop);
+      return {minutes: shortest, stops};
+    }
+    remaining.delete(current);
+    for (const edge of graph.get(current)) {
+      if (!remaining.has(edge.to) || (avoidStairs && edge.stairs)) continue;
+      const next = shortest + edge.minutes;
+      if (next < (distance.get(edge.to) ?? Infinity)) {
+        distance.set(edge.to, next);
+        previous.set(edge.to, current);
+      }
+    }
+  }
+  return null;
+}
+
+// Map coordinates are schematic. Walking times come from the path data above.
+const points = {
+  Library: [75,185], Commons: [195,90], Studio: [355,60],
+  Lab: [370,190], Garden: [190,295], Theater: [495,310], Shuttle: [545,160]
+};
+function drawMap(route, closed) {
+  const map = byId('map');
+  map.replaceChildren();
+  function shape(tag, attributes) {
+    const element = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const [name,value] of Object.entries(attributes)) element.setAttribute(name, value);
+    map.append(element);
+    return element;
+  }
+  const stops = route ? route.stops : [];
+  function line(from, to, color, width, stairs) {
+    const [x1,y1] = points[from], [x2,y2] = points[to];
+    shape('line', {x1,y1,x2,y2,stroke:color,'stroke-width':width,'stroke-dasharray':stairs?'9 5':'none'});
+  }
+  for (const [a,b,,stairs] of paths) line(a,b,'#70848a',3,stairs);
+  for (let i=1;i<stops.length;i++) {
+    const a=stops[i-1], b=stops[i];
+    const edge=graph.get(a).find(edge=>edge.to===b);
+    line(a,b,'#d6fa69',6,edge.stairs);
+  }
+  for (const [name,[x,y]] of Object.entries(points)) {
+    const active=stops.includes(name);
+    shape('circle',{cx:x,cy:y,r:9,fill:closed.has(name)?'#ef9d85':'#152632',stroke:active?'#d6fa69':'#c8d9de','stroke-width':3});
+    const label=shape('text',{x,y:y+29,'text-anchor':'middle',fill:'#fff','font-size':16,stroke:'#192c37','stroke-width':5,'paint-order':'stroke'});
+    label.textContent=closed.has(name)?name+' (closed)':name;
+  }
+}
+
+function showRoute() {
+  const from = byId('from').value, to = byId('to').value;
+  const closed = new Set([...document.querySelectorAll('#closures input:checked')].map(box => box.value));
+  const route = plan(from, to, byId('stepFree').checked, closed);
+  drawMap(route, closed);
+  byId('stops').replaceChildren();
+  byId('duration').textContent = route ? route.minutes + ' min' : 'No route available';
+  if (!route) {
+    byId('note').textContent = 'Try another location or change your walking options.';
+    return;
+  }
+  for (const place of route.stops) {
+    const stop = document.createElement('li');
+    stop.textContent = place;
+    byId('stops').append(stop);
+  }
+  const extra = route.minutes - plan(from, to, false, new Set()).minutes;
+  byId('note').textContent = from === to ? 'You are already at your destination.' : extra ? extra + ' extra min compared with the unrestricted walk.' : 'Fastest walking time between these locations.';
+}
+byId('planner').addEventListener('submit', event => {event.preventDefault(); showRoute();});
+showRoute();
+</script></body></html>
