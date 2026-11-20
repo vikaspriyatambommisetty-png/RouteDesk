@@ -1,0 +1,10 @@
+from,to,minutes,stairs
+Library,Commons,3,false
+Commons,Lab,2,true
+Commons,Studio,2,false
+Studio,Lab,4,false
+Library,Garden,5,false
+Garden,Lab,3,false
+Studio,Theater,2,true
+Garden,Theater,6,false
+Lab,Shuttle,4,false
